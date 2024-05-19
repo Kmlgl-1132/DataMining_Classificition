@@ -1,0 +1,1 @@
+Yapılmış olan komut isteminin çıktı sonuçlarıyla ilgili istatiksel analiz yorumlaması Linkeln hesabımda bulunmaktadır. Onun dışında komut istemi ile ilgili bir sıkıntı olursa linkedln'den bana ulaşabilirsiniz.
