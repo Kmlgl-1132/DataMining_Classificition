@@ -1,0 +1,172 @@
+#Veri Seti için Gerekli Görüntüleme Ayarları
+import pandas as pd
+pd.set_option("display.width",500)
+pd.set_option("display.max_columns",None)
+pd.set_option("display.max_rows",None)
+pd.set_option("display.float_format", lambda x: "%.4f" % x)
+
+#Veri Seti Okuma ve Ön İşleme
+kalp = pd.read_csv("Kullanılacak veri setinin bilgisayardaki konumu")
+kalp.head()
+kalp.shape
+kalp.isnull().sum()
+kalp.info()
+
+#Sınıflandırma Metodlarının Uygulanması
+def sınıflandırma(dataframe,t_size = 0.25,x_secimi = kalp.iloc[:,0:-1] ,y_secim = "DEATH_EVENT",rasallık = 70,KAKriter="entropy",KNN_metrics = "minkowski",oznitelik=False,Degerler=False,ConfussionMatrix=False,ROC_Curve=False,KararAgacı=False):
+    """
+
+    Parameters
+    ----------
+    dataframe: Kullanılacak veri setinin tanımlanması
+    t_size: Veri setinde teste ayrılacak kısımın belirtilmesi.
+    x_secimi: Bağımsız değişkenlerin veri setinden seçimi, önceden veri setinin tanımlanmış olması gerekir.
+    y_secim: Bağımlı değişkenin tanımlanması, öncedn veri setinin tanımlanmış olması gerekir.
+    rasallık: Veri setini test/train olarak ayırırken rassal biçimde seçer, belirtilen rasallığın sürekli olarak değişmesini sağlar.
+    KAKriter: Karar ağacı modeli için "entropy" veya "gini" ye göre yapılmasını belirtir. ("entropy")
+    KNN_metrics: K-En Yakın Komşu için kullanılacak mesafe metriğinin ayarlanması. ("minkowski")
+    oznitelik: Modelde hangi değişkenin ne kadar önemli olduğunu belirten ağırlıklandırma çıktısı sağlar.
+    Degerler: Tahmin değerleri ile gerçek değerlerin ilk 15 tanesini çıktı olarak yazdırır.
+    ConfussionMatrix: Hata matrikslerinin çıktısı elde edilir.
+    ROC_Curve: ROC eğrileriyle AUC değerlerinin çıktıları elde edilir.
+    KararAgacı: Karar Ağacı çıktısı elde edilir.
+
+    Returns;
+    =)Eğer ki sadece dataframe ve x_secimi, y_secim tanımlanırsa çıktı olarak sınıflandırma başarı düzeylerini verecektir. İsteğe veya ihtiyaca göre diğer metriklerinde
+    açılması gerekir yani False'dan True'ya çevrilmesi gerekir.
+    -------
+
+    """
+    from sklearn import preprocessing
+    from sklearn.model_selection import train_test_split
+    from sklearn.preprocessing import StandardScaler
+    from sklearn.metrics import classification_report, confusion_matrix, roc_auc_score, roc_curve
+    from sklearn.neural_network import MLPClassifier
+    import xgboost as xgb
+    from sklearn.tree import DecisionTreeClassifier
+    from sklearn.naive_bayes import GaussianNB
+    from sklearn.linear_model import LogisticRegression
+    from sklearn.ensemble import RandomForestClassifier
+    from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
+    from sklearn.neighbors import KNeighborsClassifier
+
+    cat_cols = [col for col in dataframe.columns if kalp[col].nunique() < 10]
+    def ikili_kategoriye_cevirme(dataframe, binary=[0, 1]):
+        for col in dataframe[cat_cols]:
+            if dataframe[col].dtypes != "category":
+                dataframe[col] = pd.Categorical(dataframe[col], categories=binary)
+    ikili_kategoriye_cevirme(dataframe=dataframe)
+
+    X, Y = x_secimi, dataframe[y_secim]
+    labENC = preprocessing.LabelEncoder()
+    Y = labENC.fit_transform(dataframe[y_secim])
+    X_train, X_test, Y_train, Y_test = train_test_split(X,Y,test_size=t_size,random_state=rasallık)
+    sc = StandardScaler()
+    sc.fit_transform(X_train)
+    X_train = sc.transform(X_train)
+    X_test = sc.transform(X_test)
+
+    #Sınıflandırma Çıktısı
+    metod = [("Yapay Sinir Ağları", MLPClassifier(hidden_layer_sizes=(10, 10, 10, 10), max_iter=1000, random_state=rasallık)),
+             ("XGBoost", xgb.XGBClassifier()),
+             ("Karar Ağaçları", DecisionTreeClassifier(criterion=KAKriter, random_state=rasallık)), ("Navie Bayes", GaussianNB()),
+             ("Lojistik Regresyon",LogisticRegression()), ("Random Forest",RandomForestClassifier(n_estimators=10, criterion='entropy', random_state=0)),
+             ("Linear Discriminant",LinearDiscriminantAnalysis()),("KNN", KNeighborsClassifier(n_neighbors=5, metric=KNN_metrics, p=2))]
+    Tahminler=[]
+    def modeller(sınıf_list):
+        for i, j in sınıf_list:
+                j.fit(X_train, Y_train)
+                Sınıf_Pred = j.predict(X_test)
+                print(f"############# {i} Sınıflandırma Başarısı #############")
+                print(classification_report(Y_test, Sınıf_Pred))
+                print("////////////////////////////////////////////////////////////////")
+                j = Sınıf_Pred
+                Tahminler.append(j)
+
+    modeller(metod)
+
+    #Öznitelik Belirtme
+    if oznitelik:
+        import numpy as np
+        list = [(xgb.XGBClassifier(), "XGBoost"), (DecisionTreeClassifier(criterion=KAKriter, random_state=rasallık), "Karar Ağaçları"),
+                (RandomForestClassifier(n_estimators=10, criterion='entropy', random_state=0),"Random Forest")]
+        for model, name in list:
+            model.fit(X_train, Y_train)
+            feature_importance = model.feature_importances_
+            sorted_indices = np.argsort(feature_importance)[::-1]
+            col_names = [col for col in dataframe.columns]
+            sorted_features = [col_names[i] for i in sorted_indices]
+            print("***********************************************")
+            print(f"--- {name.upper()} Öznitelik Sıralaması ---")
+            for i, feature in enumerate(sorted_features):
+                print(f"{i + 1}. {feature}: {feature_importance[sorted_indices[i]]:.4f}")
+        print("---------------------------------------------------------------------------------------------")
+        print("---------------------Diğer modellerde öznitelik desteği bulunmamaktadır.---------------------")
+        print("---------------------------------------------------------------------------------------------")
+
+    #Modellerin Tahminleri ve Gerçek Değer
+    if Degerler:
+        import pandas as pd
+        ModelTahminleri = pd.DataFrame({"GERÇEK DEĞERLER": Y_test})
+        for i, j in metod:
+            j.fit(X_train, Y_train)
+            Pred = j.predict(X_test)
+            ModelTahminleri[f"{i} Tahmini"] = Pred
+        print(ModelTahminleri[0:10])
+        print(ModelTahminleri.describe().T)
+
+    #Confusion Matriksleri
+    if ConfussionMatrix:
+        def confussion(pr_lst):
+            import seaborn as sns
+            import matplotlib.pyplot as plt
+            for i,j in pr_lst:
+                j.fit(X_train, Y_train)
+                SınıfPred = j.predict(X_test)
+                cm = confusion_matrix(Y_test, SınıfPred)
+                plt.figure(figsize=(6, 4))
+                sns.heatmap(cm, annot=True, cmap='Blues', fmt='d', cbar=False)
+                plt.xlabel('Tahmin Edilen')
+                plt.ylabel('Gerçek')
+                plt.title(f'{i} Confusion Matrix')
+                plt.show()
+        confussion(metod)
+
+    #ROC Eğrileriyle/Eğri Altında Kalan Alan
+    if ROC_Curve:
+        import matplotlib.pyplot as plt
+        def plot_roc(pred_list):
+            for i,j in pred_list:
+                j.fit(X_train, Y_train)
+                SınıfPred = j.predict(X_test)
+                fpr, tpr, thresholds = roc_curve(Y_test, SınıfPred)
+                plt.figure(figsize=(8, 6))
+                plt.plot(fpr, tpr)
+                plt.xlabel("False Positive Rate")
+                plt.ylabel("True Positive Rate")
+                plt.title(f"{i} ROC Eğrisi/ AUC Skoru:{roc_auc_score(Y_test, SınıfPred):.4f}")
+
+        plot_roc(metod)
+
+    #Karar Ağacı
+    if KararAgacı:
+        from sklearn import tree
+        import matplotlib.pyplot as plt
+        KA_CL = DecisionTreeClassifier(criterion=KAKriter, random_state=rasallık)
+        plt.figure(figsize=(20, 10))  # Ağacın boyutu
+        tree.plot_tree(KA_CL.fit(X_train,Y_train),
+                       filled=True,  # Düğümlerin dolgu rengi
+                       class_names=["0", "1"],  # Sınıf etiketleri
+                       feature_names=dataframe.columns,  # Öznitelik isimleri
+                       fontsize=6,  # Yazı boyutu
+                       max_depth=4,  # Gösterilecek maksimum derinlik
+                       rounded=True,  # Köşelerin yuvarlatılması
+                       precision=2,  # Sayısal değerlerin hassasiyeti
+                       proportion=True,  # Düğümdeki sınıf yüzdelerinin gösterimi
+                       )
+        plt.show()
+    #Özet İstatistikler
+
+
+sınıflandırma(dataframe=kalp,rasallık=8,oznitelik=False,Degerler=False,ConfussionMatrix=False,ROC_Curve=False,KararAgacı=False)
+
